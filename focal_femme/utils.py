@@ -14,7 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 def setup_openvino_dll_path():
-    """Add OpenVINO runtime libraries to DLL search path on Windows."""
+    """Add OpenVINO runtime libraries to DLL search path on Windows.
+    
+    CRITICAL: Version compatibility required to avoid Error 127 "procedure could not be found"
+    - onnxruntime-openvino 1.23.0 → openvino 2025.3.x
+    - onnxruntime-openvino 1.22.0 → openvino 2025.1.x
+    
+    Debug Error 127: Check versions match, verify DLLs exist in .venv/Lib/site-packages/openvino/libs/
+    Required DLLs: openvino.dll, tbb12.dll, openvino_intel_cpu_plugin.dll, onnxruntime_providers_openvino.dll
+    """
     import sys
     import os
     if sys.platform != "win32":
@@ -26,21 +34,42 @@ def setup_openvino_dll_path():
         import openvino
         ov_base = Path(openvino.__file__).parent
         ov_libs = ov_base / "libs"
+        
         if ov_libs.exists():
-            os.add_dll_directory(str(ov_libs))
-            logger.debug(f"Added OpenVINO libs to DLL search path: {ov_libs}")
-            return
-    except (ImportError, AttributeError):
-        pass
+            try:
+                os.add_dll_directory(str(ov_libs))
+                logger.debug(f"Added OpenVINO libs to DLL search path: {ov_libs}")
+                logger.debug(f"OpenVINO version: {openvino.__version__}")
+                
+                # Verify critical DLLs exist
+                critical_dlls = ["openvino.dll", "tbb12.dll", "openvino_intel_cpu_plugin.dll"]
+                missing_dlls = [dll for dll in critical_dlls if not (ov_libs / dll).exists()]
+                
+                if missing_dlls:
+                    logger.warning(f"Missing critical DLLs: {missing_dlls}")
+                else:
+                    logger.debug("All critical OpenVINO DLLs found")
+                    
+                return
+            except OSError as e:
+                logger.warning(f"Failed to add OpenVINO libs to DLL path: {e}")
+    except (ImportError, AttributeError) as e:
+        logger.debug(f"Could not import openvino module: {e}")
 
     # 2. Fallback: Search in sys.path (site-packages)
     for p in sys.path:
         if "site-packages" in p:
             ov_libs = Path(p) / "openvino" / "libs"
             if ov_libs.exists():
-                os.add_dll_directory(str(ov_libs))
-                logger.debug(f"Added OpenVINO libs to DLL search path from sys.path: {ov_libs}")
-                return
+                try:
+                    os.add_dll_directory(str(ov_libs))
+                    logger.debug(f"Added OpenVINO libs to DLL search path from sys.path: {ov_libs}")
+                    return
+                except OSError as e:
+                    logger.warning(f"Failed to add OpenVINO libs to DLL path (fallback): {e}")
+
+    logger.warning("Could not locate OpenVINO libs directory")
+
 
 
 def get_best_device() -> torch.device:
