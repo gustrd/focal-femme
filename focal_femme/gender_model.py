@@ -9,6 +9,8 @@ import numpy as np
 import onnxruntime as ort
 import requests
 
+from .utils import get_onnx_providers
+
 logger = logging.getLogger(__name__)
 
 # Gender model configuration
@@ -50,13 +52,14 @@ class GenderClassifier:
         if self._session is None:
             model_path = get_model_path()
 
-            # Create ONNX inference session
-            providers = ["CPUExecutionProvider"]
+            # Create ONNX inference session with best available providers
+            providers = get_onnx_providers()
             self._session = ort.InferenceSession(
                 str(model_path),
                 providers=providers,
             )
             self._input_name = self._session.get_inputs()[0].name
+            logger.debug(f"ONNX session using: {self._session.get_providers()}")
 
         return self._session
 

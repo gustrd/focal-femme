@@ -1,12 +1,96 @@
 """Utility functions for focal-femme: I/O, persistence, and helpers."""
 
+import logging
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 from PIL import Image
+
+logger = logging.getLogger(__name__)
+
+
+def get_best_device() -> torch.device:
+    """
+    Get the best available PyTorch device.
+
+    Checks for availability in order of preference:
+    1. CUDA (NVIDIA GPUs)
+    2. XPU (Intel GPUs via intel-extension-for-pytorch)
+    3. MPS (Apple Silicon)
+    4. CPU (fallback)
+
+    Returns:
+        torch.device: The best available device
+    """
+    # Check for CUDA (NVIDIA)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        logger.debug(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
+        return device
+
+    # Check for XPU (Intel) - requires intel-extension-for-pytorch
+    if hasattr(torch, "xpu"):
+        if torch.xpu.is_available():
+            device = torch.device("xpu")
+            device_name = torch.xpu.get_device_name(0) if hasattr(torch.xpu, "get_device_name") else "Intel XPU"
+            logger.debug(f"Using XPU device: {device_name}")
+            return device
+        else:
+            logger.debug("XPU module found but no XPU device available")
+    else:
+        # Check if CPU-only PyTorch is installed
+        if "+cpu" in torch.__version__:
+            logger.debug(
+                "CPU-only PyTorch installed. For Intel XPU support, reinstall PyTorch from Intel's index: "
+                "pip install torch torchvision --index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/"
+            )
+
+    # Check for MPS (Apple Silicon)
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+        logger.debug("Using Apple MPS device")
+        return device
+
+    # Fallback to CPU
+    logger.debug("Using CPU device")
+    return torch.device("cpu")
+
+
+def get_onnx_providers() -> list[str]:
+    """
+    Get available ONNX Runtime execution providers in order of preference.
+
+    Returns:
+        List of provider names to try, best first
+    """
+    import onnxruntime as ort
+
+    available = ort.get_available_providers()
+    providers = []
+
+    # Order of preference
+    preferred_order = [
+        "CUDAExecutionProvider",
+        "DmlExecutionProvider",  # DirectML for Windows (AMD, Intel, NVIDIA)
+        "CoreMLExecutionProvider",  # Apple
+        "CPUExecutionProvider",
+    ]
+
+    for provider in preferred_order:
+        if provider in available:
+            providers.append(provider)
+
+    # Ensure CPU is always available as fallback
+    if "CPUExecutionProvider" not in providers:
+        providers.append("CPUExecutionProvider")
+
+    logger.debug(f"ONNX providers: {providers}")
+    return providers
+
 
 # Supported image extensions
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}

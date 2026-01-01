@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
 from focal_femme.utils import (
     ClusterState,
@@ -15,7 +16,9 @@ from focal_femme.utils import (
     delete_cluster_state,
     format_cluster_id,
     generate_safe_filename,
+    get_best_device,
     get_image_files,
+    get_onnx_providers,
     load_cluster_state,
     parse_cluster_prefix,
     save_cluster_state,
@@ -239,3 +242,35 @@ class TestGetImageFiles:
     def test_invalid_folder(self):
         with pytest.raises(ValueError):
             get_image_files(Path("/nonexistent/folder"))
+
+
+class TestGetBestDevice:
+    def test_returns_torch_device(self):
+        device = get_best_device()
+        assert isinstance(device, torch.device)
+
+    def test_returns_valid_device_type(self):
+        device = get_best_device()
+        assert device.type in ("cpu", "cuda", "xpu", "mps")
+
+    def test_device_is_usable(self):
+        device = get_best_device()
+        # Create a simple tensor and move to device
+        tensor = torch.tensor([1.0, 2.0, 3.0])
+        tensor = tensor.to(device)
+        assert tensor.device.type == device.type
+
+
+class TestGetOnnxProviders:
+    def test_returns_list(self):
+        providers = get_onnx_providers()
+        assert isinstance(providers, list)
+
+    def test_includes_cpu_provider(self):
+        providers = get_onnx_providers()
+        assert "CPUExecutionProvider" in providers
+
+    def test_cpu_provider_is_last(self):
+        providers = get_onnx_providers()
+        # CPU should be the last fallback
+        assert providers[-1] == "CPUExecutionProvider"

@@ -33,7 +33,49 @@ pip install -e .
 - First run will download models (~150MB for MTCNN + VGGFace2 + gender classifier + beauty model)
 - All processing is local; no data leaves your machine
 - Uses PyTorch for face detection/embeddings/beauty scoring, ONNX for gender classification
-- GPU acceleration available if CUDA is installed
+
+## GPU Acceleration
+
+The tool automatically detects and uses the best available device in this order:
+
+| Priority | Device | Platform | Requirements |
+|----------|--------|----------|--------------|
+| 1 | CUDA | Windows/Linux | NVIDIA GPU + CUDA drivers |
+| 2 | XPU | Windows/Linux | Intel Arc GPU + XPU PyTorch |
+| 3 | MPS | macOS | Apple Silicon (M1/M2/M3) |
+| 4 | CPU | All | Fallback (slower) |
+
+Use `-v` flag to see which device is being used:
+```bash
+focal-femme -v /path/to/photos
+# DEBUG: Using CUDA device: NVIDIA GeForce RTX 4090
+```
+
+### Intel XPU Setup (Intel Arc GPUs)
+
+Intel XPU requires the nightly PyTorch build with XPU support:
+
+```bash
+# 1. Install XPU-enabled PyTorch (replaces standard torch)
+uv pip install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/xpu
+
+# 2. Run with --no-sync to prevent uv from overwriting XPU packages
+uv run --no-sync focal-femme /path/to/photos -v
+# DEBUG: Using XPU device: Intel(R) Arc(TM) ...
+```
+
+**Important:** Always use `uv run --no-sync` when using XPU PyTorch, otherwise `uv run` will reinstall the standard CPU PyTorch from pyproject.toml dependencies.
+
+### ONNX Runtime Acceleration
+
+The gender classifier uses ONNX Runtime, which also supports GPU acceleration:
+
+| Provider | Platform | Requirements |
+|----------|----------|--------------|
+| CUDA | Windows/Linux | `onnxruntime-gpu` package |
+| DirectML | Windows | AMD/Intel/NVIDIA via DirectX 12 |
+| CoreML | macOS | Apple Neural Engine |
+| CPU | All | Default fallback |
 
 ## Usage
 

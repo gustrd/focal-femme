@@ -10,7 +10,7 @@ import torch
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from PIL import Image
 
-from .utils import FaceData, bbox_area, bbox_center_distance, load_image
+from .utils import FaceData, bbox_area, bbox_center_distance, get_best_device, load_image
 from .gender_model import GenderClassifier
 from .beauty_model import BeautyScorer
 
@@ -49,7 +49,7 @@ class FaceDetector:
         self.female_threshold = female_threshold
 
         if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device = get_best_device()
         else:
             self.device = torch.device(device)
 

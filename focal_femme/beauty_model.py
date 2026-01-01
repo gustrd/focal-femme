@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 
+from .utils import get_best_device
+
 logger = logging.getLogger(__name__)
 
 # Google Drive file ID for pretrained beauty model
@@ -100,10 +102,10 @@ class BeautyScorer:
         Initialize the beauty scorer.
 
         Args:
-            device: Torch device ('cuda', 'cpu', or None for auto)
+            device: Torch device ('cuda', 'cpu', 'xpu', 'mps', or None for auto)
         """
         if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device = get_best_device()
         else:
             self.device = device
 
