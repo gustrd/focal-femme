@@ -28,9 +28,27 @@ uv sync
 pip install -e .
 ```
 
+### Model Downloads
+
+First run will download models (~360MB total, cached locally):
+- **RetinaFace ResNet50** (~100MB) - automatically downloaded from GitHub
+- **SCUT-FBP5500 ResNeXt-50** (~100MB) - **requires manual download** (see below)
+- **VGGFace2 InceptionResnetV1** (~110MB) - automatically downloaded
+- **Gender Classifier GoogleNet** (~50MB) - automatically downloaded
+
+**Manual download required:** SCUT-FBP5500 beauty model
+```bash
+# Download from Baidu Cloud (Chinese service)
+# URL: https://pan.baidu.com/s/1OhyJsCMfAdeo8kIZd29yAw
+# Extract ResNext50_All.pth and place at:
+# Windows: C:\Users\<user>\.cache\focal_femme\beauty_resnext50_scut.pth
+# Linux/Mac: ~/.cache/focal_femme/beauty_resnext50_scut.pth
+```
+
+**Note:** The beauty model will work without manual download (using ImageNet-pretrained ResNeXt-50), but scores will be less accurate.
+
 ### Notes
 
-- First run will download models (~150MB for MTCNN + VGGFace2 + gender classifier + beauty model)
 - All processing is local; no data leaves your machine
 - Uses PyTorch for face detection/embeddings/beauty scoring, ONNX for gender classification
 
@@ -125,11 +143,11 @@ focal-femme --reset /path/to/photos
 
 ## How It Works
 
-1. **Face Detection**: Uses MTCNN (facenet-pytorch) to detect faces
+1. **Face Detection**: Uses RetinaFace (ResNet50 backbone) for accurate face detection
 2. **Gender Classification**: Uses ONNX gender model (GoogleNet) to filter for female faces
 3. **Primary Selection**: Selects the largest female face as the primary subject
-4. **Beauty Scoring**: Predicts attractiveness score (1-5 scale) using ResNet18
-5. **Embedding Extraction**: Generates 512-dimensional VGGFace2 embeddings
+4. **Beauty Scoring**: Predicts attractiveness score (1-5 scale) using SCUT-FBP5500 ResNeXt-50
+5. **Embedding Extraction**: Generates 512-dimensional VGGFace2 embeddings via InceptionResnetV1
 6. **Clustering**: Groups similar embeddings using DBSCAN with cosine distance
 7. **Renaming**: Adds cluster prefix with normalized beauty score
 
@@ -173,6 +191,17 @@ pytest
 # Run tests with coverage
 pytest --cov=focal_femme
 ```
+
+## Future Improvements
+
+### Face Embedding Upgrade
+Currently uses InceptionResnetV1 (VGGFace2) for face embeddings in clustering. Consider upgrading to:
+- **ArcFace embeddings** via InsightFace for better clustering accuracy
+- **Integration**: RetinaFace already provides face landmarks, making ArcFace alignment easier
+- **Benefits**: State-of-the-art face recognition accuracy, better cluster separation
+- **Trade-off**: Additional dependency, slightly larger models
+
+See [InsightFace documentation](https://github.com/deepinsight/insightface) for implementation details.
 
 ## License
 

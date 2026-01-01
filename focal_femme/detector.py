@@ -1,4 +1,4 @@
-"""Face detection and gender classification module using facenet-pytorch."""
+"""Face detection and gender classification module using RetinaFace and SCUT beauty models."""
 
 import logging
 from collections.abc import Callable
@@ -7,12 +7,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from facenet_pytorch import MTCNN, InceptionResnetV1
+from facenet_pytorch import InceptionResnetV1
 from PIL import Image
 
 from .utils import FaceData, bbox_area, bbox_center_distance, get_best_device, load_image
 from .gender_model import GenderClassifier
-from .beauty_model import BeautyScorer
+from .beauty_scut import BeautyScorerSCUT
+from .retinaface_detector import RetinaFaceDetector
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class FaceDetector:
 
         Args:
             female_threshold: Minimum confidence for female classification (0-1)
-            device: Torch device ('cuda', 'cpu', or None for auto)
+            device: Torch device ('cuda', 'xpu', 'mps', 'cpu', or None for auto)
         """
         self.female_threshold = female_threshold
 
@@ -53,22 +54,19 @@ class FaceDetector:
         else:
             self.device = torch.device(device)
 
-        self._mtcnn: MTCNN | None = None
+        self._retinaface: RetinaFaceDetector | None = None
         self._resnet: InceptionResnetV1 | None = None
         self._gender_model: GenderClassifier | None = None
-        self._beauty_model: BeautyScorer | None = None
+        self._beauty_model: BeautyScorerSCUT | None = None
 
-    def _get_mtcnn(self) -> MTCNN:
-        """Lazy initialization of MTCNN face detector."""
-        if self._mtcnn is None:
-            self._mtcnn = MTCNN(
-                image_size=160,
-                margin=20,
-                keep_all=True,
-                post_process=True,  # Normalize to [-1, 1] for InceptionResnetV1
+    def _get_retinaface(self) -> RetinaFaceDetector:
+        """Lazy initialization of RetinaFace detector."""
+        if self._retinaface is None:
+            self._retinaface = RetinaFaceDetector(
                 device=self.device,
+                confidence_threshold=0.8  # Higher threshold than MTCNN's 0.75
             )
-        return self._mtcnn
+        return self._retinaface
 
     def _get_resnet(self) -> InceptionResnetV1:
         """Lazy initialization of face embedding model."""
@@ -85,15 +83,15 @@ class FaceDetector:
             self._gender_model = GenderClassifier()
         return self._gender_model
 
-    def _get_beauty_model(self) -> BeautyScorer:
-        """Lazy initialization of beauty scorer."""
+    def _get_beauty_model(self) -> BeautyScorerSCUT:
+        """Lazy initialization of SCUT beauty scorer."""
         if self._beauty_model is None:
-            self._beauty_model = BeautyScorer(device=self.device)
+            self._beauty_model = BeautyScorerSCUT(device=self.device)
         return self._beauty_model
 
     def detect_and_analyze_faces(self, image: np.ndarray) -> list[DetectedFace]:
         """
-        Detect all faces in an image, extract embeddings and classify gender.
+        Detect all faces in an image using RetinaFace, extract embeddings and classify.
 
         Args:
             image: RGB image as numpy array
@@ -105,40 +103,30 @@ class FaceDetector:
         detected_faces: list[DetectedFace] = []
 
         try:
-            # Convert to PIL Image
+            # Convert to PIL Image for embedding extraction
             pil_image = Image.fromarray(image)
 
-            # Detect faces
-            mtcnn = self._get_mtcnn()
-            boxes, probs = mtcnn.detect(pil_image)
+            # Detect faces with RetinaFace
+            retinaface = self._get_retinaface()
+            detections = retinaface.detect_faces(image)
 
-            if boxes is None:
+            if not detections:
                 return []
 
-            # Get face crops for embedding extraction
-            faces_tensor = mtcnn(pil_image)
-
-            if faces_tensor is None:
-                return []
-
-            # Get embeddings (L2 normalized for better clustering)
+            # Get models
             resnet = self._get_resnet()
-            with torch.no_grad():
-                embeddings = resnet(faces_tensor.to(self.device))
-                # L2 normalize embeddings
-                embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-                embeddings = embeddings.cpu().numpy()
-
-            # Get gender classifier and beauty scorer
             gender_model = self._get_gender_model()
             beauty_model = self._get_beauty_model()
 
             # Process each detected face
-            for i, (box, prob, embedding) in enumerate(zip(boxes, probs, embeddings)):
-                if prob < 0.75:  # Skip low-confidence detections
-                    continue
+            for detection in detections:
+                bbox_xyxy = detection['bbox']  # (x1, y1, x2, y2)
+                confidence = detection['confidence']
 
-                x1, y1, x2, y2 = map(int, box)
+                # Note: RetinaFace uses higher threshold (0.8) than MTCNN (0.75)
+                # Additional check not needed as RetinaFace already filtered
+
+                x1, y1, x2, y2 = map(int, bbox_xyxy)
 
                 # Ensure bounds are within image
                 x1 = max(0, x1)
@@ -146,13 +134,36 @@ class FaceDetector:
                 x2 = min(width, x2)
                 y2 = min(height, y2)
 
-                # Convert to (top, right, bottom, left) format
+                # Skip if bbox is too small or invalid
+                if x2 <= x1 or y2 <= y1:
+                    continue
+
+                # Convert to (top, right, bottom, left) format for compatibility
                 bbox = (y1, x2, y2, x1)
                 area = bbox_area(bbox)
                 center_dist = bbox_center_distance(bbox, width, height)
 
-                # Extract face crop for gender classification
+                # Extract face crop for gender and beauty
                 face_crop = image[y1:y2, x1:x2]
+
+                if face_crop.size == 0:
+                    continue
+
+                # Extract embedding using InceptionResnetV1
+                # Manually crop, resize to 160x160, and normalize to [-1, 1]
+                face_pil = pil_image.crop((x1, y1, x2, y2))
+                face_pil = face_pil.resize((160, 160), Image.BILINEAR)
+
+                # Convert to tensor and normalize
+                face_array = np.array(face_pil)
+                face_tensor = torch.from_numpy(face_array).permute(2, 0, 1).float()
+                face_tensor = (face_tensor - 127.5) / 128.0  # Normalize to [-1, 1]
+                face_tensor = face_tensor.unsqueeze(0).to(self.device)
+
+                with torch.no_grad():
+                    embedding = resnet(face_tensor)
+                    embedding = torch.nn.functional.normalize(embedding, p=2, dim=1)
+                    embedding = embedding.cpu().numpy()[0]
 
                 # Classify gender
                 is_female, female_conf = gender_model.predict(face_crop)
@@ -174,6 +185,8 @@ class FaceDetector:
 
         except Exception as e:
             logger.warning(f"Face detection failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return []
 
         return detected_faces
