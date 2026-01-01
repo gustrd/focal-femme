@@ -1,3 +1,4 @@
+
 from typing import List, Tuple
 
 import torch
@@ -62,73 +63,19 @@ def build_backbone(name, pretrained=False):
     return backbone_map[name]()
 
 
-class ClassHead(nn.Module):
-    def __init__(self, in_channels: int = 512, num_anchors: int = 2, fpn_num: int = 3) -> None:
+class Head(nn.Module):
+    def __init__(self, in_channels: int = 512, out_channels: int = 4) -> None:
         super().__init__()
-        self.class_head = nn.ModuleList([
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=num_anchors * 2,
-                kernel_size=(1, 1),
-                stride=1,
-                padding=0
-            )
-            for _ in range(fpn_num)
-        ])
+        self.conv1x1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=(1, 1),
+            stride=1,
+            padding=0
+        )
 
-    def forward(self, x: List[Tensor]) -> Tensor:
-        outputs = []
-        for feature, layer in zip(x, self.class_head):
-            outputs.append(layer(feature).permute(0, 2, 3, 1).contiguous())
-
-        outputs = torch.cat([out.view(out.shape[0], -1, 2) for out in outputs], dim=1)
-        return outputs
-
-
-class BboxHead(nn.Module):
-    def __init__(self, in_channels: int = 512, num_anchors: int = 2, fpn_num: int = 3) -> None:
-        super().__init__()
-        self.bbox_head = nn.ModuleList([
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=num_anchors * 4,
-                kernel_size=(1, 1),
-                stride=1,
-                padding=0
-            )
-            for _ in range(fpn_num)
-        ])
-
-    def forward(self, x: List[Tensor]) -> Tensor:
-        outputs = []
-        for feature, layer in zip(x, self.bbox_head):
-            outputs.append(layer(feature).permute(0, 2, 3, 1).contiguous())
-
-        outputs = torch.cat([out.view(out.shape[0], -1, 4) for out in outputs], dim=1)
-        return outputs
-
-
-class LandmarkHead(nn.Module):
-    def __init__(self, in_channels: int = 512, num_anchors: int = 2, fpn_num: int = 3) -> None:
-        super().__init__()
-        self.landmark_head = nn.ModuleList([
-            nn.Conv2d(
-                in_channels,
-                num_anchors * 10,
-                kernel_size=(1, 1),
-                stride=1,
-                padding=0
-            )
-            for _ in range(fpn_num)
-        ])
-
-    def forward(self, x: List[Tensor]) -> Tensor:
-        outputs = []
-        for feature, layer in zip(x, self.landmark_head):
-            outputs.append(layer(feature).permute(0, 2, 3, 1).contiguous())
-
-        outputs = torch.cat([out.view(out.shape[0], -1, 10) for out in outputs], dim=1)
-        return outputs
+    def forward(self, x: Tensor) -> Tensor:
+        return self.conv1x1(x).permute(0, 2, 3, 1).contiguous()
 
 
 class RetinaFace(nn.Module):
@@ -141,7 +88,9 @@ class RetinaFace(nn.Module):
         """
         super().__init__()
         backbone = build_backbone(cfg['name'], cfg['pretrain'])
-        self.fx = get_layer_extractor(cfg, backbone)  # feature extraction
+        
+        # NOTE: Renamed from self.fx to self.body to match checkpoint
+        self.body = get_layer_extractor(cfg, backbone)
 
         num_anchors = 2
         base_in_channels = cfg['in_channel']
@@ -161,12 +110,19 @@ class RetinaFace(nn.Module):
         self.ssh2 = SSH(out_channels, out_channels)
         self.ssh3 = SSH(out_channels, out_channels)
 
-        self.class_head = ClassHead(in_channels=cfg['out_channel'], num_anchors=num_anchors, fpn_num=3)
-        self.bbox_head = BboxHead(in_channels=cfg['out_channel'], num_anchors=num_anchors, fpn_num=3)
-        self.landmark_head = LandmarkHead(in_channels=cfg['out_channel'], num_anchors=num_anchors, fpn_num=3)
+        # Refactored Heads to match checkpoint structure:
+        # class_head.0.conv1x1... instead of class_head.class_head.0...
+        self.class_head = self._make_head(out_channels, num_anchors * 2)
+        self.bbox_head = self._make_head(out_channels, num_anchors * 4)
+        self.landmark_head = self._make_head(out_channels, num_anchors * 10)
+
+    def _make_head(self, in_channels, out_channels, fpn_num=3):
+        return nn.ModuleList([
+            Head(in_channels, out_channels) for _ in range(fpn_num)
+        ])
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        out = self.fx(x)
+        out = self.body(x)
         fpn = self.fpn(out)
 
         # single-stage headless module
@@ -176,9 +132,9 @@ class RetinaFace(nn.Module):
 
         features = [feature1, feature2, feature3]
 
-        classifications = self.class_head(features)
-        bbox_regressions = self.bbox_head(features)
-        landmark_regressions = self.landmark_head(features)
+        classifications = torch.cat([head(f).view(f.shape[0], -1, 2) for f, head in zip(features, self.class_head)], dim=1)
+        bbox_regressions = torch.cat([head(f).view(f.shape[0], -1, 4) for f, head in zip(features, self.bbox_head)], dim=1)
+        landmark_regressions = torch.cat([head(f).view(f.shape[0], -1, 10) for f, head in zip(features, self.landmark_head)], dim=1)
 
         if self.training:
             output = (bbox_regressions, classifications, landmark_regressions)

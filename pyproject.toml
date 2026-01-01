@@ -40,11 +40,7 @@ dev = [
     "pytest-cov>=4.1.0",
 ]
 # For Intel XPU support, install PyTorch from Intel's index first:
-#   pip install torch torchvision --index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
-# Then install intel-extension-for-pytorch:
-xpu = [
-    "intel-extension-for-pytorch>=2.1.0",
-]
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu
 
 [project.scripts]
 focal-femme = "focal_femme.cli:main"

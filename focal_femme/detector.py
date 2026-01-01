@@ -12,7 +12,7 @@ from PIL import Image
 
 from .utils import FaceData, bbox_area, bbox_center_distance, get_best_device, load_image
 from .gender_model import GenderClassifier
-from .beauty_scut import BeautyScorerSCUT
+from .beauty_model import BeautyScorer
 from .retinaface_detector import RetinaFaceDetector
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class FaceDetector:
         self._retinaface: RetinaFaceDetector | None = None
         self._resnet: InceptionResnetV1 | None = None
         self._gender_model: GenderClassifier | None = None
-        self._beauty_model: BeautyScorerSCUT | None = None
+        self._beauty_model: BeautyScorer | None = None
 
     def _get_retinaface(self) -> RetinaFaceDetector:
         """Lazy initialization of RetinaFace detector."""
@@ -83,10 +83,10 @@ class FaceDetector:
             self._gender_model = GenderClassifier()
         return self._gender_model
 
-    def _get_beauty_model(self) -> BeautyScorerSCUT:
+    def _get_beauty_model(self) -> BeautyScorer:
         """Lazy initialization of SCUT beauty scorer."""
         if self._beauty_model is None:
-            self._beauty_model = BeautyScorerSCUT(device=self.device)
+            self._beauty_model = BeautyScorer(device=self.device)
         return self._beauty_model
 
     def detect_and_analyze_faces(self, image: np.ndarray) -> list[DetectedFace]:

@@ -46,7 +46,7 @@ def get_best_device() -> torch.device:
         if "+cpu" in torch.__version__:
             logger.debug(
                 "CPU-only PyTorch installed. For Intel XPU support, reinstall PyTorch from Intel's index: "
-                "pip install torch torchvision --index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/"
+                "pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu"
             )
 
     # Check for MPS (Apple Silicon)

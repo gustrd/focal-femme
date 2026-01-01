@@ -68,7 +68,7 @@ class RetinaFaceDetector:
 
     def _get_model_path(self) -> Path:
         """Get path to model weights, downloading if necessary."""
-        cache_dir = Path.home() / ".cache" / "focal_femme"
+        cache_dir = Path.home() / ".cache" / "focal-femme"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         model_path = cache_dir / "retinaface_resnet50.pth"
@@ -76,7 +76,7 @@ class RetinaFaceDetector:
         if not model_path.exists():
             logger.info("Downloading RetinaFace ResNet50 model...")
             # Download from GitHub releases
-            url = "https://github.com/yakhyo/retinaface-pytorch/releases/download/v0.0.1/retinaface_resnet50.pth"
+            url = "https://huggingface.co/shilongz/FlashFace-SD1.5/resolve/main/retinaface_resnet50.pth"
             self._download_file(url, model_path)
             logger.info("RetinaFace model downloaded successfully.")
 

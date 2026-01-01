@@ -22,7 +22,7 @@ MODEL_FILENAME = "beauty_resnet18.pth"
 
 def get_model_path() -> Path:
     """Get the path where the beauty model should be stored."""
-    cache_dir = Path.home() / ".cache" / "focal_femme"
+    cache_dir = Path.home() / ".cache" / "focal-femme"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / MODEL_FILENAME
 
@@ -82,13 +82,9 @@ class BeautyModel(nn.Module):
         self.backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
 
         # Replace the final fully connected layer for regression
+        # The SCUT-FBP5500 ResNet18 weights appear to use a single Linear layer
         num_features = self.backbone.fc.in_features
-        self.backbone.fc = nn.Sequential(
-            nn.Linear(num_features, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, 1),
-        )
+        self.backbone.fc = nn.Linear(num_features, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)
@@ -127,6 +123,7 @@ class BeautyScorer:
         """Lazy initialization of beauty model."""
         if self._model is None:
             self._model = BeautyModel()
+            self._model.to(self.device) # Move to device before loading weights usually better
 
             # Try to load pretrained weights
             model_path = get_model_path()
@@ -144,24 +141,77 @@ class BeautyScorer:
             if model_path.exists():
                 try:
                     # Load the state dict
-                    state_dict = torch.load(model_path, map_location=self.device, weights_only=True)
+                    checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
 
-                    # The etrain model has different architecture, try to adapt
-                    # If it fails, we'll use our randomly initialized head
-                    try:
-                        self._model.load_state_dict(state_dict, strict=False)
-                        self._pretrained_loaded = True
-                        logger.info("Loaded pretrained beauty model weights.")
-                    except Exception as e:
-                        logger.warning(f"Could not load pretrained weights directly: {e}")
-                        # Try loading just backbone weights
-                        self._pretrained_loaded = False
+                    # Handle Checkpoint Dictionaries
+                    if isinstance(checkpoint, dict):
+                         if "state_dict" in checkpoint:
+                             state_dict = checkpoint["state_dict"]
+                         elif "model" in checkpoint:
+                             state_dict = checkpoint["model"]
+                         else:
+                             state_dict = checkpoint
+                    else:
+                        state_dict = checkpoint
+                    
+                    # --- Robust Weight Remapping ---
+                    new_state_dict = {}
+                    import re
+                    
+                    for k, v in state_dict.items():
+                        new_k = k
+                        
+                        # 1. Strip 'module.' prefix (DataParallel)
+                        if new_k.startswith("module."):
+                            new_k = new_k[7:]
+                        
+                        # 2. Map 'fullyconnected' -> 'backbone.fc' (or 'fc' if applied to backbone directly)
+                        # We are loading into 'self._model.backbone' mostly, but let's see.
+                        # The keys likely correspond to the ResNet itself. 
+                        # If we load into self._model.backbone, keys should look like 'conv1...', 'layer1...'
+                        # If we load into self._model, keys should look like 'backbone.conv1...'
+                        
+                        # The loaded weights seem to have keys like 'layer1...' (after stripping module)
+                        # So they match the backbone structure directly.
+                        
+                        if "fullyconnected" in new_k:
+                            new_k = new_k.replace("fullyconnected", "fc")
+                            
+                        # 3. Strip internal 'groupX' which implies ResNeXt-like naming or older Torch conversion
+                        # Example: layer4.1.group1.bn2.bias -> layer4.1.bn2.bias
+                        # Example: group1.conv1.weight -> conv1.weight
+                        # Regex to remove group\d+ followed by dot or preceded by dot
+                        new_k = re.sub(r'^group\d+\.', '', new_k)
+                        new_k = re.sub(r'\.group\d+', '', new_k)
+                        
+                        # 4. Map 'backbone.' prefix if needed? 
+                        # Since our BeautyModel HAS a .backbone attribute, if we load state_dict into BeautyModel,
+                        # we need keys to start with 'backbone.'.
+                        # The loaded keys (e.g. 'layer4...') belong to resnet.
+                        # So we prefix them with 'backbone.'
+                        if not new_k.startswith("backbone."):
+                            new_k = f"backbone.{new_k}"
+                            
+                        new_state_dict[new_k] = v
+
+                    # Load
+                    keys = self._model.load_state_dict(new_state_dict, strict=False)
+                    
+                    missing = [k for k in keys.missing_keys if "num_batches_tracked" not in k]
+                    unexpected = keys.unexpected_keys
+                    
+                    if len(missing) > 0 or len(unexpected) > 0:
+                        logger.warning(f"Weight loading loose match. Missing: {len(missing)}, Unexpected: {len(unexpected)}")
+                        if len(missing) < 20: # Log only if few
+                            logger.debug(f"Missing keys: {missing}")
+                    
+                    self._pretrained_loaded = True
+                    logger.info("Loaded pretrained beauty model weights.")
 
                 except Exception as e:
                     logger.warning(f"Failed to load beauty model: {e}")
                     self._pretrained_loaded = False
 
-            self._model.to(self.device)
             self._model.eval()
 
         return self._model

@@ -19,7 +19,7 @@ class TestGetModelPath:
         path = get_model_path()
         assert isinstance(path, Path)
         assert ".cache" in str(path)
-        assert "focal_femme" in str(path)
+        assert "focal-femme" in str(path)
         assert path.name == "beauty_resnet18.pth"
 
 

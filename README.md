@@ -7,10 +7,10 @@ A Python CLI tool for automatic face clustering of photo collections with focus 
 - Detects all faces in images and filters for female faces
 - Selects the "primary" female face (largest, most central)
 - Clusters similar faces using DBSCAN algorithm
-- **Beauty scoring**: Predicts attractiveness score for each face using ResNet18
+- **Beauty scoring**: Predicts attractiveness score for each face using SCUT-FBP5500 (ResNet-18)
 - Renames files with cluster-based prefixes including normalized beauty score (e.g., `person_001_85_IMG_1234.jpg`)
 - Persists embeddings to avoid reprocessing on subsequent runs
-- Supports incremental processing of new images
+- Supports incremental processing of photo collections
 
 ## Installation
 
@@ -30,22 +30,25 @@ pip install -e .
 
 ### Model Downloads
 
-First run will download models (~360MB total, cached locally):
-- **RetinaFace ResNet50** (~100MB) - automatically downloaded from GitHub
-- **SCUT-FBP5500 ResNeXt-50** (~100MB) - **requires manual download** (see below)
-- **VGGFace2 InceptionResnetV1** (~110MB) - automatically downloaded
-- **Gender Classifier GoogleNet** (~50MB) - automatically downloaded
+First run will automatically download models (~400MB total, cached locally). However, you can pre-download everything using the provided script:
 
-**Manual download required:** SCUT-FBP5500 beauty model
 ```bash
-# Download from Baidu Cloud (Chinese service)
-# URL: https://pan.baidu.com/s/1OhyJsCMfAdeo8kIZd29yAw
-# Extract ResNext50_All.pth and place at:
-# Windows: C:\Users\<user>\.cache\focal_femme\beauty_resnext50_scut.pth
-# Linux/Mac: ~/.cache/focal_femme/beauty_resnext50_scut.pth
+# Windows
+.\install_models.bat
+
+# Linux/Mac
+chmod +x install_models.sh
+./install_models.sh
+
+# Or directly with uv
+uv run scripts/setup_models.py
 ```
 
-**Note:** The beauty model will work without manual download (using ImageNet-pretrained ResNeXt-50), but scores will be less accurate.
+**Included Models:**
+- **RetinaFace ResNet50** (~100MB) - Face Detection
+- **SCUT-FBP5500 ResNet-18** (~90MB) - Beauty Prediction
+- **VGGFace2 InceptionResnetV1** (~110MB) - Face Embeddings
+- **Gender Classifier GoogleNet** (~50MB) - Gender Classification (ONNX)
 
 ### Notes
 
@@ -146,7 +149,7 @@ focal-femme --reset /path/to/photos
 1. **Face Detection**: Uses RetinaFace (ResNet50 backbone) for accurate face detection
 2. **Gender Classification**: Uses ONNX gender model (GoogleNet) to filter for female faces
 3. **Primary Selection**: Selects the largest female face as the primary subject
-4. **Beauty Scoring**: Predicts attractiveness score (1-5 scale) using SCUT-FBP5500 ResNeXt-50
+4. **Beauty Scoring**: Predicts attractiveness score (1-5 scale) using SCUT-FBP5500 ResNet-18
 5. **Embedding Extraction**: Generates 512-dimensional VGGFace2 embeddings via InceptionResnetV1
 6. **Clustering**: Groups similar embeddings using DBSCAN with cosine distance
 7. **Renaming**: Adds cluster prefix with normalized beauty score
