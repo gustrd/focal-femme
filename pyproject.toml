@@ -1,0 +1,60 @@
+[project]
+name = "focal-femme"
+version = "0.1.0"
+description = "A Python CLI tool for automatic face clustering of photo collections with focus on the primary female subject"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Your Name", email = "you@example.com" }
+]
+keywords = ["face-recognition", "clustering", "photo-organization", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = [
+    "facenet-pytorch>=2.5.3",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "onnxruntime>=1.16.0",
+    "scikit-learn>=1.3.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "click>=8.1.0",
+    "tqdm>=4.65.0",
+    "opencv-python>=4.8.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+focal-femme = "focal_femme.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["focal_femme"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
