@@ -52,8 +52,7 @@ def setup():
     models = [
         {
             "name": "retinaface_resnet50.pth",
-            "#url_comment": "OpenVINO Model Zoo mirror for RetinaFace ResNet50",
-            "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/1/retinaface-resnet50-pytorch/retinaface-resnet50-pytorch/Resnet50_Final.pth",
+            "url": "https://huggingface.co/shilongz/FlashFace-SD1.5/resolve/main/retinaface_resnet50.pth",
             "desc": "RetinaFace face detector (ResNet50 backbone)"
         },
         {
@@ -73,6 +72,12 @@ def setup():
     
     for model in models:
         dest = cache_dir / model["name"]
+        
+        # Check if file exists but is suspiciously small (likely an error page like a 404 HTML)
+        if dest.exists() and dest.stat().st_size < 1024 * 1024: # Less than 1MB
+            print(f"File {dest.name} is suspiciously small ({dest.stat().st_size} bytes). Triggering re-download.")
+            dest.unlink()
+
         try:
             download_file(model["url"], dest)
         except Exception as e:
