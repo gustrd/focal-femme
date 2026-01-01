@@ -99,7 +99,9 @@ The gender classifier uses ONNX Runtime, which supports GPU acceleration via sev
 | CoreML | macOS | Apple Neural Engine |
 | CPU | All | Default fallback |
 
-We recommend **OpenVINO** for Intel Core Ultra and Intel Arc users as it provides significant acceleration for gender classification. The tool automatically resolves dependencies for OpenVINO on Windows.
+We recommend **OpenVINO** for Intel Core Ultra and Intel Arc users as it provides significant acceleration for gender classification. The tool automatically configures the OpenVINO DLL search path on Windows.
+
+**Note:** Version compatibility is critical - `onnxruntime-openvino 1.23.0` requires `openvino 2025.3.x`. The correct version is specified in `pyproject.toml`.
 
 ## Usage
 
