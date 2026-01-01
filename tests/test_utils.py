@@ -22,6 +22,7 @@ from focal_femme.utils import (
     load_cluster_state,
     parse_cluster_prefix,
     save_cluster_state,
+    setup_openvino_dll_path,
 )
 
 
@@ -274,3 +275,14 @@ class TestGetOnnxProviders:
         providers = get_onnx_providers()
         # CPU should be the last fallback
         assert providers[-1] == "CPUExecutionProvider"
+
+
+class TestSetupOpenvinoDllPath:
+    def test_setup_openvino_dll_path_runs_without_error(self):
+        # Even if OpenVINO is not installed, this should not raise an error
+        # It's hard to test the actual DLL loading without being on Windows with OV,
+        # but we can ensure it doesn't crash.
+        try:
+            setup_openvino_dll_path()
+        except Exception as e:
+            pytest.fail(f"setup_openvino_dll_path raised {type(e).__name__} unexpectedly!")

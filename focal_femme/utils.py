@@ -13,6 +13,36 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+def setup_openvino_dll_path():
+    """Add OpenVINO runtime libraries to DLL search path on Windows."""
+    import sys
+    import os
+    if sys.platform != "win32":
+        return
+
+    # 1. Try to find openvino package via import
+    try:
+        # Import inside function to avoid circular/premature imports
+        import openvino
+        ov_base = Path(openvino.__file__).parent
+        ov_libs = ov_base / "libs"
+        if ov_libs.exists():
+            os.add_dll_directory(str(ov_libs))
+            logger.debug(f"Added OpenVINO libs to DLL search path: {ov_libs}")
+            return
+    except (ImportError, AttributeError):
+        pass
+
+    # 2. Fallback: Search in sys.path (site-packages)
+    for p in sys.path:
+        if "site-packages" in p:
+            ov_libs = Path(p) / "openvino" / "libs"
+            if ov_libs.exists():
+                os.add_dll_directory(str(ov_libs))
+                logger.debug(f"Added OpenVINO libs to DLL search path from sys.path: {ov_libs}")
+                return
+
+
 def get_best_device() -> torch.device:
     """
     Get the best available PyTorch device.
@@ -67,6 +97,7 @@ def get_onnx_providers() -> list[str]:
     Returns:
         List of provider names to try, best first
     """
+    setup_openvino_dll_path()
     import onnxruntime as ort
 
     available = ort.get_available_providers()
@@ -75,6 +106,7 @@ def get_onnx_providers() -> list[str]:
     # Order of preference
     preferred_order = [
         "CUDAExecutionProvider",
+        "OpenVINOExecutionProvider",  # Intel optimized
         "DmlExecutionProvider",  # DirectML for Windows (AMD, Intel, NVIDIA)
         "CoreMLExecutionProvider",  # Apple
         "CPUExecutionProvider",

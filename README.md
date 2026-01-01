@@ -89,14 +89,17 @@ uv run --no-sync focal-femme /path/to/photos -v
 
 ### ONNX Runtime Acceleration
 
-The gender classifier uses ONNX Runtime, which also supports GPU acceleration:
+The gender classifier uses ONNX Runtime, which supports GPU acceleration via several providers:
 
 | Provider | Platform | Requirements |
 |----------|----------|--------------|
 | CUDA | Windows/Linux | `onnxruntime-gpu` package |
+| **OpenVINO** | Windows/Linux | `onnxruntime-openvino` (Intel CPU/GPU optimized) |
 | DirectML | Windows | AMD/Intel/NVIDIA via DirectX 12 |
 | CoreML | macOS | Apple Neural Engine |
 | CPU | All | Default fallback |
+
+We recommend **OpenVINO** for Intel Core Ultra and Intel Arc users as it provides significant acceleration for gender classification. The tool automatically resolves dependencies for OpenVINO on Windows.
 
 ## Usage
 
