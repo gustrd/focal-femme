@@ -12,6 +12,7 @@ from PIL import Image
 
 from .utils import FaceData, bbox_area, bbox_center_distance, load_image
 from .gender_model import GenderClassifier
+from .beauty_model import BeautyScorer
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class DetectedFace:
     is_female: bool
     female_confidence: float
     face_image: np.ndarray  # Cropped face for gender classification
+    beauty_score: float = 0.0
 
 
 class FaceDetector:
@@ -54,6 +56,7 @@ class FaceDetector:
         self._mtcnn: MTCNN | None = None
         self._resnet: InceptionResnetV1 | None = None
         self._gender_model: GenderClassifier | None = None
+        self._beauty_model: BeautyScorer | None = None
 
     def _get_mtcnn(self) -> MTCNN:
         """Lazy initialization of MTCNN face detector."""
@@ -81,6 +84,12 @@ class FaceDetector:
         if self._gender_model is None:
             self._gender_model = GenderClassifier()
         return self._gender_model
+
+    def _get_beauty_model(self) -> BeautyScorer:
+        """Lazy initialization of beauty scorer."""
+        if self._beauty_model is None:
+            self._beauty_model = BeautyScorer(device=self.device)
+        return self._beauty_model
 
     def detect_and_analyze_faces(self, image: np.ndarray) -> list[DetectedFace]:
         """
@@ -120,8 +129,9 @@ class FaceDetector:
                 embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
                 embeddings = embeddings.cpu().numpy()
 
-            # Get gender classifier
+            # Get gender classifier and beauty scorer
             gender_model = self._get_gender_model()
+            beauty_model = self._get_beauty_model()
 
             # Process each detected face
             for i, (box, prob, embedding) in enumerate(zip(boxes, probs, embeddings)):
@@ -148,6 +158,9 @@ class FaceDetector:
                 is_female, female_conf = gender_model.predict(face_crop)
                 is_female = female_conf >= self.female_threshold
 
+                # Predict beauty score
+                beauty_score = beauty_model.predict(face_crop)
+
                 detected_faces.append(DetectedFace(
                     bbox=bbox,
                     embedding=embedding,
@@ -156,6 +169,7 @@ class FaceDetector:
                     is_female=is_female,
                     female_confidence=female_conf,
                     face_image=face_crop,
+                    beauty_score=beauty_score,
                 ))
 
         except Exception as e:
@@ -227,7 +241,7 @@ class FaceDetector:
                 gender_str = "FEMALE" if face.is_female else "MALE"
                 logger.warning(
                     f"  Face {i+1}: {gender_str} (conf={face.female_confidence:.2f}), "
-                    f"area={face.area}px"
+                    f"area={face.area}px, beauty={face.beauty_score:.2f}"
                 )
 
         primary_face = self.select_primary_face(faces)
@@ -258,6 +272,7 @@ class FaceDetector:
             is_female=True,
             confidence=primary_face.female_confidence,
             cluster_id=None,
+            beauty_score=primary_face.beauty_score,
         )
 
     def process_images(

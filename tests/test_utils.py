@@ -55,20 +55,34 @@ class TestBboxCenterDistance:
 
 class TestFormatClusterId:
     def test_single_digit(self):
-        assert format_cluster_id(1) == "person_001"
+        assert format_cluster_id(1) == "person_001_00"
 
     def test_double_digit(self):
-        assert format_cluster_id(42) == "person_042"
+        assert format_cluster_id(42) == "person_042_00"
 
     def test_triple_digit(self):
-        assert format_cluster_id(123) == "person_123"
+        assert format_cluster_id(123) == "person_123_00"
 
     def test_zero(self):
-        assert format_cluster_id(0) == "person_000"
+        assert format_cluster_id(0) == "person_000_00"
+
+    def test_with_beauty_score(self):
+        assert format_cluster_id(1, 85) == "person_001_85"
+
+    def test_with_max_beauty_score(self):
+        assert format_cluster_id(0, 99) == "person_000_99"
+
+    def test_with_min_beauty_score(self):
+        assert format_cluster_id(5, 0) == "person_005_00"
 
 
 class TestParseClusterPrefix:
-    def test_with_prefix(self):
+    def test_with_prefix_new_format(self):
+        prefix, name = parse_cluster_prefix("person_001_85_IMG_1234.jpg")
+        assert prefix == "person_001_85"
+        assert name == "IMG_1234.jpg"
+
+    def test_with_prefix_old_format(self):
         prefix, name = parse_cluster_prefix("person_001_IMG_1234.jpg")
         assert prefix == "person_001"
         assert name == "IMG_1234.jpg"
@@ -88,33 +102,48 @@ class TestParseClusterPrefix:
         assert prefix is None
         assert name == "person_IMG_1234.jpg"
 
+    def test_with_max_beauty_score(self):
+        prefix, name = parse_cluster_prefix("person_000_99_photo.jpg")
+        assert prefix == "person_000_99"
+        assert name == "photo.jpg"
+
 
 class TestGenerateSafeFilename:
     def test_basic_rename(self):
         path = Path("/photos/IMG_1234.jpg")
         name = generate_safe_filename(path, 1, set())
-        assert name == "person_001_IMG_1234.jpg"
+        assert name == "person_001_00_IMG_1234.jpg"
+
+    def test_with_beauty_score(self):
+        path = Path("/photos/IMG_1234.jpg")
+        name = generate_safe_filename(path, 1, set(), beauty_score=85)
+        assert name == "person_001_85_IMG_1234.jpg"
 
     def test_collision_handling(self):
         path = Path("/photos/IMG_1234.jpg")
-        existing = {"person_001_IMG_1234.jpg"}
-        name = generate_safe_filename(path, 1, existing)
-        assert name == "person_001_IMG_1234_1.jpg"
+        existing = {"person_001_50_IMG_1234.jpg"}
+        name = generate_safe_filename(path, 1, existing, beauty_score=50)
+        assert name == "person_001_50_IMG_1234_1.jpg"
 
     def test_multiple_collisions(self):
         path = Path("/photos/IMG_1234.jpg")
         existing = {
-            "person_001_IMG_1234.jpg",
-            "person_001_IMG_1234_1.jpg",
-            "person_001_IMG_1234_2.jpg",
+            "person_001_75_IMG_1234.jpg",
+            "person_001_75_IMG_1234_1.jpg",
+            "person_001_75_IMG_1234_2.jpg",
         }
-        name = generate_safe_filename(path, 1, existing)
-        assert name == "person_001_IMG_1234_3.jpg"
+        name = generate_safe_filename(path, 1, existing, beauty_score=75)
+        assert name == "person_001_75_IMG_1234_3.jpg"
 
-    def test_strip_existing_prefix(self):
+    def test_strip_existing_prefix_old_format(self):
         path = Path("/photos/person_002_IMG_1234.jpg")
-        name = generate_safe_filename(path, 1, set())
-        assert name == "person_001_IMG_1234.jpg"
+        name = generate_safe_filename(path, 1, set(), beauty_score=90)
+        assert name == "person_001_90_IMG_1234.jpg"
+
+    def test_strip_existing_prefix_new_format(self):
+        path = Path("/photos/person_002_50_IMG_1234.jpg")
+        name = generate_safe_filename(path, 1, set(), beauty_score=90)
+        assert name == "person_001_90_IMG_1234.jpg"
 
 
 class TestClusterState:

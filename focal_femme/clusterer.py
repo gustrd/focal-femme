@@ -202,3 +202,60 @@ def get_cluster_summary(state: ClusterState) -> dict[int, list[str]]:
             clusters[face_data.cluster_id].append(file_path)
 
     return clusters
+
+
+def get_cluster_beauty_scores(state: ClusterState) -> dict[int, float]:
+    """
+    Get the average beauty score for each cluster.
+
+    Args:
+        state: ClusterState containing face data with beauty scores
+
+    Returns:
+        Dictionary mapping cluster_id to average beauty score
+    """
+    cluster_scores: dict[int, list[float]] = {}
+
+    for face_data in state.faces.values():
+        if face_data.cluster_id is not None and face_data.beauty_score > 0:
+            if face_data.cluster_id not in cluster_scores:
+                cluster_scores[face_data.cluster_id] = []
+            cluster_scores[face_data.cluster_id].append(face_data.beauty_score)
+
+    # Compute averages
+    return {
+        cluster_id: sum(scores) / len(scores)
+        for cluster_id, scores in cluster_scores.items()
+        if scores
+    }
+
+
+def normalize_beauty_scores(beauty_scores: dict[int, float]) -> dict[int, int]:
+    """
+    Normalize beauty scores to 0-99 range using min-max normalization.
+
+    Args:
+        beauty_scores: Dictionary mapping cluster_id to average beauty score
+
+    Returns:
+        Dictionary mapping cluster_id to normalized score (0-99)
+    """
+    if not beauty_scores:
+        return {}
+
+    scores = list(beauty_scores.values())
+    min_score = min(scores)
+    max_score = max(scores)
+
+    # Avoid division by zero if all scores are the same
+    if max_score == min_score:
+        # All same score - use 50 as middle value
+        return {cluster_id: 50 for cluster_id in beauty_scores}
+
+    # Normalize to 0-99 range
+    normalized: dict[int, int] = {}
+    for cluster_id, score in beauty_scores.items():
+        normalized_value = (score - min_score) / (max_score - min_score) * 99
+        normalized[cluster_id] = int(round(normalized_value))
+
+    return normalized

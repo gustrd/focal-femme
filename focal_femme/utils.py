@@ -25,6 +25,7 @@ class FaceData:
     is_female: bool
     confidence: float = 0.0
     cluster_id: int | None = None
+    beauty_score: float = 0.0
 
 
 @dataclass
@@ -102,23 +103,32 @@ def delete_cluster_state(folder: Path) -> bool:
     return False
 
 
-def format_cluster_id(cluster_id: int) -> str:
-    """Format cluster ID as a padded string (e.g., 'person_001')."""
-    return f"person_{cluster_id:03d}"
+def format_cluster_id(cluster_id: int, beauty_score: int = 0) -> str:
+    """Format cluster ID with beauty score (e.g., 'person_001_85')."""
+    return f"person_{cluster_id:03d}_{beauty_score:02d}"
 
 
 def parse_cluster_prefix(filename: str) -> tuple[str | None, str]:
     """
     Parse a filename to extract cluster prefix if present.
 
+    Handles both old format (person_001_) and new format (person_001_85_).
+
     Returns:
         Tuple of (cluster_prefix or None, original_filename_without_prefix)
     """
     if filename.startswith("person_"):
-        parts = filename.split("_", 2)
+        parts = filename.split("_", 3)
         if len(parts) >= 3 and parts[1].isdigit():
-            # Has valid prefix like "person_001_"
-            return f"person_{parts[1]}", parts[2]
+            # Check if third part is also a number (beauty score) - must be 2 digits
+            if len(parts) >= 4 and parts[2].isdigit() and len(parts[2]) == 2:
+                # New format: person_001_85_filename
+                return f"person_{parts[1]}_{parts[2]}", parts[3]
+            else:
+                # Old format: person_001_filename
+                # Rejoin everything after person_XXX_
+                remainder = "_".join(parts[2:])
+                return f"person_{parts[1]}", remainder
 
     return None, filename
 
@@ -127,19 +137,21 @@ def generate_safe_filename(
     original_path: Path,
     cluster_id: int,
     existing_files: set[str],
+    beauty_score: int = 0,
 ) -> str:
     """
-    Generate a safe filename with cluster prefix, handling collisions.
+    Generate a safe filename with cluster prefix and beauty score.
 
     Args:
         original_path: Original file path
         cluster_id: Assigned cluster ID
         existing_files: Set of filenames already in use
+        beauty_score: Normalized beauty score (0-99)
 
     Returns:
-        New filename with cluster prefix
+        New filename with cluster prefix and beauty score
     """
-    prefix = format_cluster_id(cluster_id)
+    prefix = format_cluster_id(cluster_id, beauty_score)
 
     # Strip any existing cluster prefix from the original name
     _, base_name = parse_cluster_prefix(original_path.name)

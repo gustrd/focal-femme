@@ -8,7 +8,7 @@ import click
 from tqdm import tqdm
 
 from . import __version__
-from .clusterer import FaceClusterer, get_cluster_summary
+from .clusterer import FaceClusterer, get_cluster_summary, get_cluster_beauty_scores, normalize_beauty_scores
 from .detector import FaceDetector
 from .renamer import FileRenamer, summarize_operations, summarize_results
 from .utils import (
@@ -164,20 +164,24 @@ def main(
 
     # Show cluster summary
     cluster_summary = get_cluster_summary(state)
+    beauty_scores = get_cluster_beauty_scores(state)
+    normalized_scores = normalize_beauty_scores(beauty_scores)
     click.echo(f"\nClustering complete:")
     click.echo(f"  - {cluster_result.num_clusters} clusters formed")
     click.echo(f"  - {cluster_result.num_noise} images as individual clusters (noise)")
     click.echo(f"  - {len(state.faces)} total images with faces")
 
-    if verbose:
-        click.echo("\nCluster breakdown:")
-        for cluster_id in sorted(cluster_summary.keys()):
-            files = cluster_summary[cluster_id]
-            click.echo(f"  {format_cluster_id(cluster_id)}: {len(files)} images")
+    # Always show cluster breakdown with beauty scores
+    click.echo("\nCluster breakdown:")
+    for cluster_id in sorted(cluster_summary.keys()):
+        files = cluster_summary[cluster_id]
+        beauty = beauty_scores.get(cluster_id, 0.0)
+        norm_score = normalized_scores.get(cluster_id, 0)
+        click.echo(f"  {format_cluster_id(cluster_id, norm_score)}: {len(files)} images, avg beauty: {beauty:.2f} (norm: {norm_score})")
 
     # Plan rename operations
     renamer = FileRenamer(dry_run=dry_run)
-    operations = renamer.plan_renames(state, folder)
+    operations = renamer.plan_renames(state, folder, normalized_scores)
 
     if not operations:
         click.echo("\nNo files need renaming (all already have correct prefixes).")

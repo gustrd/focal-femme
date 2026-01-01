@@ -7,7 +7,8 @@ A Python CLI tool for automatic face clustering of photo collections with focus 
 - Detects all faces in images and filters for female faces
 - Selects the "primary" female face (largest, most central)
 - Clusters similar faces using DBSCAN algorithm
-- Renames files with cluster-based prefixes (e.g., `person_001_IMG_1234.jpg`)
+- **Beauty scoring**: Predicts attractiveness score for each face using ResNet18
+- Renames files with cluster-based prefixes including normalized beauty score (e.g., `person_001_85_IMG_1234.jpg`)
 - Persists embeddings to avoid reprocessing on subsequent runs
 - Supports incremental processing of new images
 
@@ -29,9 +30,9 @@ pip install -e .
 
 ### Notes
 
-- First run will download models (~100MB for MTCNN + VGGFace2 + gender classifier)
+- First run will download models (~150MB for MTCNN + VGGFace2 + gender classifier + beauty model)
 - All processing is local; no data leaves your machine
-- Uses PyTorch for face detection/embeddings, ONNX for gender classification
+- Uses PyTorch for face detection/embeddings/beauty scoring, ONNX for gender classification
 - GPU acceleration available if CUDA is installed
 
 ## Usage
@@ -85,9 +86,30 @@ focal-femme --reset /path/to/photos
 1. **Face Detection**: Uses MTCNN (facenet-pytorch) to detect faces
 2. **Gender Classification**: Uses ONNX gender model (GoogleNet) to filter for female faces
 3. **Primary Selection**: Selects the largest female face as the primary subject
-4. **Embedding Extraction**: Generates 512-dimensional VGGFace2 embeddings
-5. **Clustering**: Groups similar embeddings using DBSCAN
-6. **Renaming**: Adds cluster prefix to organize by person
+4. **Beauty Scoring**: Predicts attractiveness score (1-5 scale) using ResNet18
+5. **Embedding Extraction**: Generates 512-dimensional VGGFace2 embeddings
+6. **Clustering**: Groups similar embeddings using DBSCAN with cosine distance
+7. **Renaming**: Adds cluster prefix with normalized beauty score
+
+## File Naming Format
+
+Files are renamed with the format: `person_XXX_YY_originalname.ext`
+
+- `XXX` = Cluster ID (000-999)
+- `YY` = Normalized beauty score (00-99, relative to other clusters in the dataset)
+
+Example output:
+```
+Cluster breakdown:
+  person_000_99: 15 images, avg beauty: 3.78 (norm: 99)
+  person_001_45: 8 images, avg beauty: 3.12 (norm: 45)
+  person_002_00: 3 images, avg beauty: 2.85 (norm: 00)
+```
+
+The beauty score is normalized using min-max scaling across all clusters:
+- Cluster with highest average beauty score gets `99`
+- Cluster with lowest average beauty score gets `00`
+- Other clusters are scaled proportionally
 
 ## Supported Formats
 

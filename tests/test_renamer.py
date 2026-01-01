@@ -44,21 +44,39 @@ class TestFileRenamer:
 
             assert len(operations) == 1
             assert operations[0].source == test_file
-            assert operations[0].destination.name == "person_001_IMG_1234.jpg"
+            assert operations[0].destination.name == "person_001_00_IMG_1234.jpg"
 
-    def test_skip_already_prefixed(self):
+    def test_plan_renames_with_beauty_score(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             folder = Path(tmpdir)
 
-            # Create file with correct prefix
-            test_file = folder / "person_001_IMG_1234.jpg"
+            test_file = folder / "IMG_1234.jpg"
             test_file.touch()
 
             state = ClusterState()
             state.faces[str(test_file)] = create_face_data(test_file, 1)
 
             renamer = FileRenamer()
-            operations = renamer.plan_renames(state, folder)
+            normalized_scores = {1: 85}
+            operations = renamer.plan_renames(state, folder, normalized_scores)
+
+            assert len(operations) == 1
+            assert operations[0].destination.name == "person_001_85_IMG_1234.jpg"
+
+    def test_skip_already_prefixed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+
+            # Create file with correct prefix (new format with beauty score)
+            test_file = folder / "person_001_50_IMG_1234.jpg"
+            test_file.touch()
+
+            state = ClusterState()
+            state.faces[str(test_file)] = create_face_data(test_file, 1)
+
+            renamer = FileRenamer()
+            normalized_scores = {1: 50}
+            operations = renamer.plan_renames(state, folder, normalized_scores)
 
             assert len(operations) == 0
 
@@ -67,17 +85,18 @@ class TestFileRenamer:
             folder = Path(tmpdir)
 
             # Create file with wrong prefix
-            test_file = folder / "person_002_IMG_1234.jpg"
+            test_file = folder / "person_002_50_IMG_1234.jpg"
             test_file.touch()
 
             state = ClusterState()
             state.faces[str(test_file)] = create_face_data(test_file, 1)
 
             renamer = FileRenamer()
-            operations = renamer.plan_renames(state, folder)
+            normalized_scores = {1: 75}
+            operations = renamer.plan_renames(state, folder, normalized_scores)
 
             assert len(operations) == 1
-            assert operations[0].destination.name == "person_001_IMG_1234.jpg"
+            assert operations[0].destination.name == "person_001_75_IMG_1234.jpg"
 
     def test_handle_collisions(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,7 +138,7 @@ class TestFileRenamer:
 
             # File should not be renamed
             assert test_file.exists()
-            assert not (folder / "person_001_IMG_1234.jpg").exists()
+            assert not (folder / "person_001_00_IMG_1234.jpg").exists()
             assert all(r.success for r in results)
 
     def test_execute_renames(self):
@@ -141,7 +160,7 @@ class TestFileRenamer:
 
             # Original should be gone, new file should exist
             assert not test_file.exists()
-            new_file = folder / "person_001_IMG_1234.jpg"
+            new_file = folder / "person_001_00_IMG_1234.jpg"
             assert new_file.exists()
             assert new_file.read_text() == "test content"
 
@@ -161,7 +180,7 @@ class TestFileRenamer:
             renamer.update_state_paths(state, results)
 
             # State should now have new path as key
-            new_path = folder / "person_001_IMG_1234.jpg"
+            new_path = folder / "person_001_00_IMG_1234.jpg"
             assert str(test_file) not in state.faces
             assert str(new_path) in state.faces
 

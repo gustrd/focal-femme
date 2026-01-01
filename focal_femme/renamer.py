@@ -53,6 +53,7 @@ class FileRenamer:
         self,
         state: ClusterState,
         folder: Path,
+        normalized_beauty_scores: dict[int, int] | None = None,
     ) -> list[RenameOperation]:
         """
         Plan rename operations based on cluster assignments.
@@ -60,11 +61,15 @@ class FileRenamer:
         Args:
             state: ClusterState with cluster assignments
             folder: Target folder containing the files
+            normalized_beauty_scores: Optional dict mapping cluster_id to normalized score (0-99)
 
         Returns:
             List of RenameOperation objects
         """
         operations: list[RenameOperation] = []
+
+        if normalized_beauty_scores is None:
+            normalized_beauty_scores = {}
 
         # Get set of all current filenames (for collision detection)
         existing_files = {f.name for f in folder.iterdir() if f.is_file()}
@@ -82,9 +87,12 @@ class FileRenamer:
                 logger.warning(f"File no longer exists: {file_path}")
                 continue
 
+            # Get normalized beauty score for this cluster
+            beauty_score = normalized_beauty_scores.get(face_data.cluster_id, 0)
+
             # Check if file already has the correct prefix
             current_prefix, _ = parse_cluster_prefix(file_path.name)
-            expected_prefix = format_cluster_id(face_data.cluster_id)
+            expected_prefix = format_cluster_id(face_data.cluster_id, beauty_score)
 
             if current_prefix == expected_prefix:
                 # Already has correct prefix, skip
@@ -98,6 +106,7 @@ class FileRenamer:
                 file_path,
                 face_data.cluster_id,
                 collision_set,
+                beauty_score,
             )
 
             new_path = file_path.parent / new_name
