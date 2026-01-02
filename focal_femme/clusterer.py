@@ -259,3 +259,50 @@ def normalize_beauty_scores(beauty_scores: dict[int, float]) -> dict[int, int]:
         normalized[cluster_id] = int(round(normalized_value))
 
     return normalized
+
+
+def normalize_photo_beauty_scores(state: ClusterState) -> dict[str, int]:
+    """
+    Normalize individual photo beauty scores to 0-99 range across ALL photos.
+
+    Unlike normalize_beauty_scores() which normalizes cluster averages,
+    this normalizes each photo's beauty score globally.
+
+    Args:
+        state: ClusterState containing face data with beauty scores
+
+    Returns:
+        Dictionary mapping file_path (str) to normalized score (0-99)
+    """
+    if not state.faces:
+        return {}
+
+    # Collect all individual photo beauty scores (excluding zeros)
+    photo_scores: dict[str, float] = {}
+    for file_path, face_data in state.faces.items():
+        if face_data.beauty_score > 0:
+            photo_scores[file_path] = face_data.beauty_score
+
+    if not photo_scores:
+        return {}
+
+    scores = list(photo_scores.values())
+    min_score = min(scores)
+    max_score = max(scores)
+
+    # Avoid division by zero if all scores are the same
+    if max_score == min_score:
+        return {file_path: 50 for file_path in photo_scores}
+
+    # Normalize to 0-99 range using min-max scaling
+    normalized: dict[str, int] = {}
+    for file_path, score in photo_scores.items():
+        normalized_value = (score - min_score) / (max_score - min_score) * 99
+        normalized[file_path] = int(round(normalized_value))
+
+    # Handle photos with zero beauty scores
+    for file_path, face_data in state.faces.items():
+        if file_path not in normalized:
+            normalized[file_path] = 0
+
+    return normalized

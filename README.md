@@ -104,6 +104,9 @@ Options:
                          Lower values = stricter clustering
   --min-samples INT      DBSCAN min_samples (default: 2)
                          Minimum images to form a cluster
+  --beauty-score-mode    Beauty score mode: 'photo' or 'person' (default: photo)
+                         'photo' = each photo gets unique score
+                         'person' = all photos of same person get average score
   --dry-run              Preview changes without renaming
   --reset                Clear existing embeddings cache
   --verbose, -v          Show detailed processing info
@@ -129,6 +132,11 @@ Reset and reprocess all images:
 focal-femme --reset /path/to/photos
 ```
 
+Use per-person beauty scores (original behavior):
+```bash
+focal-femme --beauty-score-mode person /path/to/photos
+```
+
 ## How It Works
 
 1. **Face Detection**: Uses RetinaFace (ResNet50 backbone) for accurate face detection
@@ -144,7 +152,7 @@ focal-femme --reset /path/to/photos
 Files are renamed with the format: `person_XXX_YY_originalname.ext`
 
 - `XXX` = Cluster ID (000-999)
-- `YY` = Normalized beauty score (00-99, relative to other clusters in the dataset)
+- `YY` = Normalized beauty score (00-99)
 
 Example output:
 ```
@@ -154,10 +162,39 @@ Cluster breakdown:
   person_002_00: 3 images, avg beauty: 2.85 (norm: 00)
 ```
 
-The beauty score is normalized using min-max scaling across all clusters:
-- Cluster with highest average beauty score gets `99`
-- Cluster with lowest average beauty score gets `00`
-- Other clusters are scaled proportionally
+### Beauty Score Modes
+
+The tool supports two beauty scoring modes:
+
+**Per-Photo Mode (default)**: Each photo gets its own normalized beauty score
+```bash
+focal-femme /path/to/photos
+# or explicitly: focal-femme --beauty-score-mode photo /path/to/photos
+```
+
+Example output - same person, different scores per photo:
+```
+person_001_45_IMG_1234.jpg  # This specific photo scored 45
+person_001_78_IMG_5678.jpg  # This specific photo scored 78
+person_001_92_IMG_9012.jpg  # This specific photo scored 92
+```
+
+**Per-Person Mode**: All photos of the same person get the cluster average score
+```bash
+focal-femme --beauty-score-mode person /path/to/photos
+```
+
+Example output - same person, same average score:
+```
+person_001_72_IMG_1234.jpg  # Average score for this person
+person_001_72_IMG_5678.jpg  # Same average score
+person_001_72_IMG_9012.jpg  # Same average score
+```
+
+The beauty score is normalized using min-max scaling:
+- **Per-photo mode**: Normalizes across ALL individual photos in the dataset
+- **Per-person mode**: Normalizes across cluster averages
+- Highest score gets `99`, lowest gets `00`, others scaled proportionally
 
 ## Supported Formats
 

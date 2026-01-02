@@ -5,7 +5,9 @@
       "WebFetch(domain:github.com)",
       "Bash(uv run pytest:*)",
       "Bash(git clone:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(uv sync:*)"
     ]
   }
 }

@@ -8,7 +8,13 @@ import click
 from tqdm import tqdm
 
 from . import __version__
-from .clusterer import FaceClusterer, get_cluster_summary, get_cluster_beauty_scores, normalize_beauty_scores
+from .clusterer import (
+    FaceClusterer,
+    get_cluster_summary,
+    get_cluster_beauty_scores,
+    normalize_beauty_scores,
+    normalize_photo_beauty_scores,
+)
 from .detector import FaceDetector
 from .renamer import FileRenamer, summarize_operations, summarize_results
 from .utils import (
@@ -68,6 +74,12 @@ def setup_logging(verbose: bool) -> None:
     default=0.5,
     help="Minimum confidence for female classification (0-1, default: 0.5).",
 )
+@click.option(
+    "--beauty-score-mode",
+    type=click.Choice(["photo", "person"], case_sensitive=False),
+    default="photo",
+    help="Beauty score mode: 'photo' for per-photo scores (default), 'person' for per-person average.",
+)
 @click.version_option(version=__version__, prog_name="focal-femme")
 def main(
     folder: Path,
@@ -77,6 +89,7 @@ def main(
     reset: bool,
     verbose: bool,
     female_threshold: float,
+    beauty_score_mode: str,
 ) -> None:
     """
     Organize photos by clustering faces of the primary female subject.
@@ -166,24 +179,48 @@ def main(
 
     # Show cluster summary
     cluster_summary = get_cluster_summary(state)
-    beauty_scores = get_cluster_beauty_scores(state)
-    normalized_scores = normalize_beauty_scores(beauty_scores)
+    cluster_beauty_scores = get_cluster_beauty_scores(state)
+
+    # Compute beauty scores based on mode
+    if beauty_score_mode.lower() == "person":
+        # Per-person mode: use cluster averages (current behavior)
+        normalized_scores = normalize_beauty_scores(cluster_beauty_scores)
+
+        # Convert to per-file mapping for renamer
+        normalized_scores_per_file = {}
+        for file_path, face_data in state.faces.items():
+            if face_data.cluster_id is not None:
+                normalized_scores_per_file[file_path] = normalized_scores.get(face_data.cluster_id, 0)
+    else:
+        # Per-photo mode: use individual photo scores (NEW DEFAULT)
+        normalized_scores_per_file = normalize_photo_beauty_scores(state)
+
+        # Calculate cluster averages for display only
+        normalized_scores = {}
+        for cluster_id, files in cluster_summary.items():
+            scores_in_cluster = [normalized_scores_per_file.get(f, 0) for f in files if f in normalized_scores_per_file]
+            if scores_in_cluster:
+                normalized_scores[cluster_id] = int(round(sum(scores_in_cluster) / len(scores_in_cluster)))
+            else:
+                normalized_scores[cluster_id] = 0
+
     click.echo(f"\nClustering complete:")
     click.echo(f"  - {cluster_result.num_clusters} clusters formed")
     click.echo(f"  - {cluster_result.num_noise} images as individual clusters (noise)")
     click.echo(f"  - {len(state.faces)} total images with faces")
+    click.echo(f"  - Beauty score mode: {beauty_score_mode}")
 
-    # Always show cluster breakdown with beauty scores
+    # Show cluster breakdown with beauty scores
     click.echo("\nCluster breakdown:")
     for cluster_id in sorted(cluster_summary.keys()):
         files = cluster_summary[cluster_id]
-        beauty = beauty_scores.get(cluster_id, 0.0)
+        beauty = cluster_beauty_scores.get(cluster_id, 0.0)
         norm_score = normalized_scores.get(cluster_id, 0)
         click.echo(f"  {format_cluster_id(cluster_id, norm_score)}: {len(files)} images, avg beauty: {beauty:.2f} (norm: {norm_score})")
 
     # Plan rename operations
     renamer = FileRenamer(dry_run=dry_run)
-    operations = renamer.plan_renames(state, folder, normalized_scores)
+    operations = renamer.plan_renames(state, folder, normalized_scores_per_file)
 
     if not operations:
         click.echo("\nNo files need renaming (all already have correct prefixes).")

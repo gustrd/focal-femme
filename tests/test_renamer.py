@@ -184,6 +184,66 @@ class TestFileRenamer:
             assert str(test_file) not in state.faces
             assert str(new_path) in state.faces
 
+    def test_plan_renames_per_photo_scores(self):
+        """Test renamer with per-photo scores (dict[str, int])."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+
+            # Two files in same cluster with different beauty scores
+            file1 = folder / "IMG_1234.jpg"
+            file1.touch()
+            file2 = folder / "IMG_5678.jpg"
+            file2.touch()
+
+            state = ClusterState()
+            state.faces[str(file1)] = create_face_data(file1, 1)
+            state.faces[str(file2)] = create_face_data(file2, 1)
+
+            renamer = FileRenamer()
+            # Per-photo scores: different scores for same cluster
+            per_photo_scores = {str(file1): 45, str(file2): 85}
+            operations = renamer.plan_renames(state, folder, per_photo_scores)
+
+            assert len(operations) == 2
+
+            # Find operations by source
+            op1 = next(op for op in operations if op.source == file1)
+            op2 = next(op for op in operations if op.source == file2)
+
+            # Same cluster ID but different beauty scores
+            assert op1.destination.name == "person_001_45_IMG_1234.jpg"
+            assert op2.destination.name == "person_001_85_IMG_5678.jpg"
+
+    def test_plan_renames_per_person_backward_compat(self):
+        """Test that per-person mode (dict[int, int]) still works."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+
+            # Two files in same cluster
+            file1 = folder / "IMG_1234.jpg"
+            file1.touch()
+            file2 = folder / "IMG_5678.jpg"
+            file2.touch()
+
+            state = ClusterState()
+            state.faces[str(file1)] = create_face_data(file1, 1)
+            state.faces[str(file2)] = create_face_data(file2, 1)
+
+            renamer = FileRenamer()
+            # Per-person scores: cluster_id -> score
+            per_person_scores = {1: 72}
+            operations = renamer.plan_renames(state, folder, per_person_scores)
+
+            assert len(operations) == 2
+
+            # Find operations by source
+            op1 = next(op for op in operations if op.source == file1)
+            op2 = next(op for op in operations if op.source == file2)
+
+            # Same cluster ID and same beauty score (per-person mode)
+            assert op1.destination.name == "person_001_72_IMG_1234.jpg"
+            assert op2.destination.name == "person_001_72_IMG_5678.jpg"
+
 
 class TestRenameOperation:
     def test_properties(self):

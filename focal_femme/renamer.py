@@ -53,7 +53,7 @@ class FileRenamer:
         self,
         state: ClusterState,
         folder: Path,
-        normalized_beauty_scores: dict[int, int] | None = None,
+        normalized_beauty_scores: dict[int | str, int] | None = None,
     ) -> list[RenameOperation]:
         """
         Plan rename operations based on cluster assignments.
@@ -61,7 +61,9 @@ class FileRenamer:
         Args:
             state: ClusterState with cluster assignments
             folder: Target folder containing the files
-            normalized_beauty_scores: Optional dict mapping cluster_id to normalized score (0-99)
+            normalized_beauty_scores: Optional dict mapping either:
+                - cluster_id (int) to normalized score for per-person mode
+                - file_path (str) to normalized score for per-photo mode
 
         Returns:
             List of RenameOperation objects
@@ -87,8 +89,11 @@ class FileRenamer:
                 logger.warning(f"File no longer exists: {file_path}")
                 continue
 
-            # Get normalized beauty score for this cluster
-            beauty_score = normalized_beauty_scores.get(face_data.cluster_id, 0)
+            # Get normalized beauty score
+            # Try file_path first (per-photo), then cluster_id (per-person)
+            beauty_score = normalized_beauty_scores.get(
+                file_path_str, normalized_beauty_scores.get(face_data.cluster_id, 0)
+            )
 
             # Check if file already has the correct prefix
             current_prefix, _ = parse_cluster_prefix(file_path.name)

@@ -10,6 +10,7 @@ from focal_femme.clusterer import (
     get_cluster_summary,
     get_cluster_beauty_scores,
     normalize_beauty_scores,
+    normalize_photo_beauty_scores,
 )
 from focal_femme.utils import ClusterState, FaceData
 
@@ -272,3 +273,89 @@ class TestNormalizeBeautyScores:
         assert normalized[0] == 0
         assert normalized[1] == 50
         assert normalized[2] == 99
+
+
+class TestNormalizePhotoBeautyScores:
+    def test_empty_state(self):
+        state = ClusterState()
+        normalized = normalize_photo_beauty_scores(state)
+        assert normalized == {}
+
+    def test_single_photo(self):
+        state = ClusterState()
+        face1 = create_face_data("file1.jpg", [1.0, 0.0, 0.0], beauty_score=3.5)
+        state.faces["file1.jpg"] = face1
+
+        normalized = normalize_photo_beauty_scores(state)
+        assert normalized["file1.jpg"] == 50  # Single score gets middle value
+
+    def test_multiple_photos_different_clusters(self):
+        state = ClusterState()
+
+        # Cluster 0 - two photos
+        face1 = create_face_data("file1.jpg", [1.0, 0.0, 0.0], beauty_score=2.0)
+        face1.cluster_id = 0
+        state.faces["file1.jpg"] = face1
+
+        face2 = create_face_data("file2.jpg", [1.0, 0.1, 0.0], beauty_score=4.0)
+        face2.cluster_id = 0
+        state.faces["file2.jpg"] = face2
+
+        # Cluster 1 - one photo
+        face3 = create_face_data("file3.jpg", [0.0, 0.0, 1.0], beauty_score=6.0)
+        face3.cluster_id = 1
+        state.faces["file3.jpg"] = face3
+
+        normalized = normalize_photo_beauty_scores(state)
+
+        # Each photo should be normalized independently
+        assert normalized["file1.jpg"] == 0  # Lowest score
+        assert normalized["file2.jpg"] == 50  # Middle score
+        assert normalized["file3.jpg"] == 99  # Highest score
+
+    def test_same_scores(self):
+        state = ClusterState()
+
+        for i in range(3):
+            face = create_face_data(f"file{i}.jpg", [1.0, 0.0, 0.0], beauty_score=3.0)
+            state.faces[f"file{i}.jpg"] = face
+
+        normalized = normalize_photo_beauty_scores(state)
+        assert all(v == 50 for v in normalized.values())
+
+    def test_ignores_zero_scores(self):
+        state = ClusterState()
+
+        face1 = create_face_data("file1.jpg", [1.0, 0.0, 0.0], beauty_score=2.0)
+        state.faces["file1.jpg"] = face1
+
+        face2 = create_face_data("file2.jpg", [1.0, 0.1, 0.0], beauty_score=0.0)
+        state.faces["file2.jpg"] = face2
+
+        face3 = create_face_data("file3.jpg", [0.0, 0.0, 1.0], beauty_score=4.0)
+        state.faces["file3.jpg"] = face3
+
+        normalized = normalize_photo_beauty_scores(state)
+
+        # Zero score should still be in result but set to 0
+        assert normalized["file1.jpg"] == 0
+        assert normalized["file2.jpg"] == 0
+        assert normalized["file3.jpg"] == 99
+
+    def test_two_photos_same_cluster(self):
+        """Test that photos in same cluster get different scores in photo mode."""
+        state = ClusterState()
+
+        face1 = create_face_data("file1.jpg", [1.0, 0.0, 0.0], beauty_score=2.5)
+        face1.cluster_id = 0
+        state.faces["file1.jpg"] = face1
+
+        face2 = create_face_data("file2.jpg", [1.0, 0.1, 0.0], beauty_score=4.5)
+        face2.cluster_id = 0
+        state.faces["file2.jpg"] = face2
+
+        normalized = normalize_photo_beauty_scores(state)
+
+        # Different photos should get different scores even in same cluster
+        assert normalized["file1.jpg"] == 0
+        assert normalized["file2.jpg"] == 99
