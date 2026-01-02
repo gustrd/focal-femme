@@ -28,27 +28,7 @@ uv sync
 pip install -e .
 ```
 
-### Model Downloads
-
-First run will automatically download models (~400MB total, cached locally). However, you can pre-download everything using the provided script:
-
-```bash
-# Windows
-.\install_models.bat
-
-# Linux/Mac
-chmod +x install_models.sh
-./install_models.sh
-
-# Or directly with uv
-uv run scripts/setup_models.py
-```
-
-**Included Models:**
-- **RetinaFace ResNet50** (~100MB) - Face Detection
-- **SCUT-FBP5500 ResNet-18** (~90MB) - Beauty Prediction
-- **VGGFace2 InceptionResnetV1** (~110MB) - Face Embeddings
-- **Gender Classifier GoogleNet** (~50MB) - Gender Classification (ONNX)
+All required models will be downloaded automatically on the first run (approximately 400MB, cached in your home directory).
 
 ### Notes
 

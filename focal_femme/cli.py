@@ -87,6 +87,8 @@ def main(
     and clusters them using DBSCAN. Files are renamed with cluster-based
     prefixes (e.g., person_001_IMG_1234.jpg).
     """
+    from .model_setup import setup_models
+    setup_models()
     setup_logging(verbose)
     folder = folder.resolve()
 

@@ -1,26 +1,17 @@
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#     "requests",
-#     "tqdm",
-#     "facenet-pytorch",
-#     "torch",
-#     "torchvision"
-# ]
-# ///
 import os
 import sys
 from pathlib import Path
 import requests
 from tqdm import tqdm
+import click
 
 def download_file(url: str, destination: Path):
     """Download a file with a progress bar."""
     if destination.exists():
-        print(f"Already exists: {destination.name}")
+        click.echo(f"Already exists: {destination.name}")
         return
 
-    print(f"Downloading {destination.name}...")
+    click.echo(f"Downloading {destination.name}...")
     try:
         response = requests.get(url, stream=True, timeout=300)
         response.raise_for_status()
@@ -44,7 +35,7 @@ def download_file(url: str, destination: Path):
             destination.unlink() # Cleanup partial download
         raise e
 
-def setup():
+def setup_models():
     """Download all required models for focal-femme."""
     cache_dir = Path.home() / ".cache" / "focal-femme"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -67,44 +58,34 @@ def setup():
         }
     ]
     
-    print("=== focal-femme Model Setup ===")
-    print(f"Target directory: {cache_dir}\n")
+    click.echo("=== focal-femme Model Setup ===")
+    click.echo(f"Target directory: {cache_dir}\n")
     
     for model in models:
         dest = cache_dir / model["name"]
         
         # Check if file exists but is suspiciously small (likely an error page like a 404 HTML)
         if dest.exists() and dest.stat().st_size < 1024 * 1024: # Less than 1MB
-            print(f"File {dest.name} is suspiciously small ({dest.stat().st_size} bytes). Triggering re-download.")
+            click.echo(f"File {dest.name} is suspiciously small ({dest.stat().st_size} bytes). Triggering re-download.")
             dest.unlink()
 
         try:
             download_file(model["url"], dest)
         except Exception as e:
-            print(f"Error downloading {model['name']}: {e}")
+            click.echo(f"Error downloading {model['name']}: {e}", err=True)
             if "manual_instruction" in model:
-                print(f"ACTION REQUIRED: {model['manual_instruction']}")
-                print(f"Target Path: {dest}")
+                click.echo(f"ACTION REQUIRED: {model['manual_instruction']}", err=True)
+                click.echo(f"Target Path: {dest}", err=True)
             
-    print("\nTriggering automatic download for InceptionResnetV1 (VGGFace2)...")
+    click.echo("\nTriggering automatic download for InceptionResnetV1 (VGGFace2)...")
     try:
         from facenet_pytorch import InceptionResnetV1
         import torch
         # This will trigger download if not present
         InceptionResnetV1(pretrained='vggface2').eval()
-        print("InceptionResnetV1 ready.")
+        click.echo("InceptionResnetV1 ready.")
     except Exception as e:
-        print(f"Note: Could not pre-trigger InceptionResnetV1 download: {e}")
-        print("This will be downloaded automatically during first run.")
+        click.echo(f"Note: Could not pre-trigger InceptionResnetV1 download: {e}", err=True)
+        click.echo("This will be downloaded automatically during first run.", err=True)
 
-    print("\nAll models processed.")
-
-if __name__ == "__main__":
-    try:
-        setup()
-    except KeyboardInterrupt:
-        print("\nDownload interrupted by user.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nAn error occurred: {e}")
-        sys.exit(1)
+    click.echo("\nAll models processed.")
